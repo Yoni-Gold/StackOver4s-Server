@@ -207,13 +207,55 @@ app.get('/posts' , mongoConnect , (req , res) => {
     {
         search = search.trim();
     }
+    
+    Post.find({$and:[userFilter ? {userID: userFilter} : {} , 
+        search ? {$or: [{title: { $regex: '.*' + search + '.*' , $options: 'i'}} , {content: { $regex: '.*' + search + '.*' , $options: 'i'}}]} : {} , 
+        tags[0] ? {tags : { $all : tags }} : {}]})
+    .sort('-date')
+    .then(async result => {
+        let dataLength = result.length;
+        if (sort === 'likes')
+        {
+            result = await Promise.all(result.map(async post => {
+                post = post.toJSON();
+                await Like.countDocuments({type: 'post' , postID: post.id} , (error , count) => post = {...post , likes: count});
+                return post;
+            }));
 
-    if (req.body.saved)
-    {
-        Post.find({$or: req.body.saved}) // saved => [{id: 'fr65d012eecam34k42dc771'} , {id: '534rvg56y6ffgf66g5yr91'} , {id: 'csd024j3t67s3js75t437h'}]
-        .sort('-date')
-        .then(async result => {
-            let dataLength = result.length;
+            let sortedArray = [result[0]];
+            let bool = false;
+            for (let i = 1; i < result.length; i++)
+            {
+                for (let j = 0; j < sortedArray.length; j++)
+                {
+                    if (sortedArray[j].likes < result[i].likes)
+                    {
+                        sortedArray.splice(j, 0, result[i]);
+                        bool = true;
+                        break;
+                    }
+                }
+                if (!bool)
+                {
+                    sortedArray.push(result[i]);
+                }
+                bool = false;
+            }
+
+            result = sortedArray.slice(0 , offset);
+            result = await Promise.all(result.map(async post => {
+                uid && await Like.find({userID: uid , type: 'post' , postID: post.id}).then(result => result[0] ? post = {...post , didLike: true} : post = {...post , didLike: false});
+                uid && await User.find({githubID: uid}).then(user => user[0].savedPosts.includes(post.id) ? post = {...post , didSave: true} : post = {...post , didSave: false});
+                await User.find({githubID: post.userID}).then(result => result[0] ? post = {...post , userName: result[0].name} : post = {...post , userName: 'unknown'});
+                return post;
+            }))
+
+            mongoose.connection.close()
+            .then(() => res.send({data: result , length: dataLength}));
+        }
+
+        else
+        {
             result = result.slice(0 , offset);
             result = await Promise.all(result.map(async post => {
                 post = post.toJSON();
@@ -224,82 +266,14 @@ app.get('/posts' , mongoConnect , (req , res) => {
                 return post;
             }))
             mongoose.connection.close()
-            .then(() => res.send({data: result , length: dataLength}));
-        })
-        .catch(error => {
-            mongoose.connection.close()
-            .then(() => console.log(error));
-        })
-    }
-
-    else
-    {
-        Post.find({$and:[userFilter ? {userID: userFilter} : {} , 
-            search ? {$or: [{title: { $regex: '.*' + search + '.*' , $options: 'i'}} , {content: { $regex: '.*' + search + '.*' , $options: 'i'}}]} : {} , 
-            tags[0] ? {tags : { $all : tags }} : {}]})
-        .sort('-date')
-        .then(async result => {
-            let dataLength = result.length;
-            if (sort === 'likes')
-            {
-                result = await Promise.all(result.map(async post => {
-                    post = post.toJSON();
-                    await Like.countDocuments({type: 'post' , postID: post.id} , (error , count) => post = {...post , likes: count});
-                    return post;
-                }));
-
-                let sortedArray = [result[0]];
-                let bool = false;
-                for (let i = 1; i < result.length; i++)
-                {
-                    for (let j = 0; j < sortedArray.length; j++)
-                    {
-                        if (sortedArray[j].likes < result[i].likes)
-                        {
-                            sortedArray.splice(j, 0, result[i]);
-                            bool = true;
-                            break;
-                        }
-                    }
-                    if (!bool)
-                    {
-                        sortedArray.push(result[i]);
-                    }
-                    bool = false;
-                }
-
-                result = sortedArray.slice(0 , offset);
-                result = await Promise.all(result.map(async post => {
-                    uid && await Like.find({userID: uid , type: 'post' , postID: post.id}).then(result => result[0] ? post = {...post , didLike: true} : post = {...post , didLike: false});
-                    uid && await User.find({githubID: uid}).then(user => user[0].savedPosts.includes(post.id) ? post = {...post , didSave: true} : post = {...post , didSave: false});
-                    await User.find({githubID: post.userID}).then(result => result[0] ? post = {...post , userName: result[0].name} : post = {...post , userName: 'unknown'});
-                    return post;
-                }))
-
-                mongoose.connection.close()
-                .then(() => res.send({data: result , length: dataLength}));
-            }
-
-            else
-            {
-                result = result.slice(0 , offset);
-                result = await Promise.all(result.map(async post => {
-                    post = post.toJSON();
-                    await Like.countDocuments({type: 'post' , postID: post.id} , (error , count) => post = {...post , likes: count});
-                    uid && await Like.find({userID: uid , type: 'post' , postID: post.id}).then(result => result[0] ? post = {...post , didLike: true} : post = {...post , didLike: false});
-                    uid && await User.find({githubID: uid}).then(user => user[0].savedPosts.includes(post.id) ? post = {...post , didSave: true} : post = {...post , didSave: false});
-                    await User.find({githubID: post.userID}).then(result => result[0] ? post = {...post , userName: result[0].name} : post = {...post , userName: 'unknown'});
-                    return post;
-                }))
-                mongoose.connection.close()
-                .then(() => res.send({data: result , length: dataLength})); 
-            }
-        })
-        .catch(error => {
-            mongoose.connection.close()
-            .then(() => console.log(error));
-        })
-    }
+            .then(() => res.send({data: result , length: dataLength})); 
+        }
+    })
+    .catch(error => {
+        mongoose.connection.close()
+        .then(() => console.log(error));
+    });
+    
 })
 
 app.get('/comments/:id' , mongoConnect , (req , res) => {
