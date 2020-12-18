@@ -21,7 +21,7 @@ const mongoConnect = (req , res , next) => {
             next();
         })
         .catch(error => {
-            console.log('error connecting to MongoDB: ', error.message)
+            console.log('error connecting to MongoDB: ', error.message);
         });  
 }
 
