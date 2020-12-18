@@ -1,0 +1,58 @@
+GET http://localhost:3001/posts?offset=10&search=&user=
+Content-Type: application/json
+
+{
+   "userID": "yakov"
+}
+
+###
+
+GET http://localhost:3001/comments/5fd5df346368db4cd0750a79
+
+###
+
+POST http://localhost:3001/posts
+Content-Type: application/json
+
+{
+   "userID": "guy",
+   "date": 1605386994121,
+   "title": "react proxy doesnt work for some reason",
+   "content": "tbvhth thrtfyhimjbi mkm  kjbyib ijhu  pmkm hfbjdf bv dfb dfb df bhj yuk yuybkjvtybm b y bkg vgfj vff  jb gj bkbykbykhknbg  bhgfjghjkghk bvv",
+   "tags": ["react"]
+}
+
+###
+
+POST http://localhost:3001/likes
+Content-Type: application/json
+
+{
+   "userID": "yossi",
+   "type": "post",
+   "postID": "5fd5d6cf6368db4cd0750a79",
+   "reciverID": "dolev"
+}
+
+###
+
+POST http://localhost:3001/users
+Content-Type: application/json
+
+{
+   "githubID": "maya",
+   "name": "MAYA",
+   "email": "-"
+}
+
+###
+
+POST http://localhost:3001/comments
+Content-Type: application/json
+
+{
+   "userID": "shai",
+   "date": 1606031114121,
+   "content": "hello",
+   "postID": "5fd5d6cf6368db4cd0750a73"
+}
