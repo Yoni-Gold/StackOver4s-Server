@@ -14,17 +14,26 @@ const unknownEndpoint = (request, response) => {
     response.status(404).send({ error: 'unknown endpoint' });
 };
 
-const mongoConnect = (req , res , next) => {
-    console.log('url: ' + req.url , ' method: ' + req.method , ' params: ' + req.params , ' query: ' + req.query);
-    mongoose.connect(`mongodb+srv://yoni:${process.env.MONGO_PASSWORD}@${process.env.MONGO_CLUSTER}.uv5un.mongodb.net/${process.env.MONGO_DBNAME}?retryWrites=true&w=majority`, { useNewUrlParser: true, useUnifiedTopology: true })
+const mongoConnect = (req , res , next) => { // middleware that creates a connection to the database with mongoose
+    if (req.body.test)
+    {
+        next();
+    }
+    
+    else
+    {
+        console.log('url: ' + req.url , ' method: ' + req.method , ' params: ' + req.params , ' query: ' + req.query);
+        mongoose.connect(`mongodb+srv://yoni:${process.env.MONGO_PASSWORD}@${process.env.MONGO_CLUSTER}.uv5un.mongodb.net/${process.env.MONGO_DBNAME}?retryWrites=true&w=majority`, { useNewUrlParser: true, useUnifiedTopology: true })
         .then(() => {
             next();
         })
         .catch(error => {
             console.log('error connecting to MongoDB: ', error.message);
         });  
+    }
 }
 
+// creates a post
 app.post('/posts' , mongoConnect , (req , res) => {
     const post = new Post({
         userID: req.body.userID,
@@ -41,6 +50,7 @@ app.post('/posts' , mongoConnect , (req , res) => {
     });
 })
 
+// creates a comment
 app.post('/comments' , mongoConnect , (req , res) => {
     const comment = new Comment({
         userID: req.body.userID,
@@ -56,6 +66,7 @@ app.post('/comments' , mongoConnect , (req , res) => {
     });
 })
 
+// creates a like
 app.post('/likes' , mongoConnect , (req , res) => {
     Like.find({
         userID: req.body.userID, 
@@ -98,44 +109,46 @@ app.post('/likes' , mongoConnect , (req , res) => {
     })
 })
 
+// creates or updates a user and gives the site analytics
 app.post('/users' , mongoConnect , async (req , res) => {
-    let usersCount;
-    let postsCount;
+    let usersCount = 0;
+    let postsCount = 0;
     let tagsArray = [{tag: "" , count: 0}];
-    await Post.find({} , (error , result) => {
-        let countObject = {};
-        postsCount = result.length;
-        result.forEach(post => {
-            post.tags.forEach(tag => {
-                countObject[tag] ? countObject[tag]++ : countObject[tag] = 1;
-            })
-        });
-        console.log(countObject , "    Node: " + countObject['node']);
-        let bool = false;
-        for (tag in countObject)
+    await Post.find({} , (error , result) => { // this part calculates the most trending tags
+        if (result)
         {
-            for (let i = 0; i < tagsArray.length; i++)
+            let countObject = {};
+            postsCount = result.length;
+            result.forEach(post => {
+                post.tags.forEach(tag => {
+                    countObject[tag] ? countObject[tag]++ : countObject[tag] = 1;
+                })
+            });
+            let bool = false;
+            for (tag in countObject)
             {
-                if (tagsArray[i].count < countObject[tag])
+                for (let i = 0; i < tagsArray.length; i++)
                 {
-                    tagsArray.splice(i, 0, {tag , count: countObject[tag]});
-                    bool = true;
-                    break;
+                    if (tagsArray[i].count < countObject[tag])
+                    {
+                        tagsArray.splice(i, 0, {tag , count: countObject[tag]});
+                        bool = true;
+                        break;
+                    }
+                }
+                
+                if (!bool)
+                {
+                    tagsArray.push({tag , count: countObject[tag]});
+                }
+                bool = false;
+                
+                if (tagsArray.length > 3)
+                {
+                    tagsArray.pop();
                 }
             }
-
-            if (!bool)
-            {
-                tagsArray.push({tag , count: countObject[tag]});
-            }
-            bool = false;
-
-            if (tagsArray.length > 3)
-            {
-                tagsArray.pop();
-            }
         }
-        console.log(tagsArray);
     })
     .then(() => User.countDocuments({} , (error , count) => usersCount = count))
 
@@ -147,7 +160,7 @@ app.post('/users' , mongoConnect , async (req , res) => {
 
     else
     {
-        User.find({githubID: req.body.githubID}).then(async user => {
+        User.find({githubID: req.body.githubID}).then(async user => { // if user exists it will update his name and rank
             user = user[0];
             if (user)
             {
@@ -175,7 +188,7 @@ app.post('/users' , mongoConnect , async (req , res) => {
                 });
             }
             
-            else 
+            else // this creates a new user if he does not exist
             {
                 const newUser = new User({
                     githubID: req.body.githubID,
@@ -195,6 +208,7 @@ app.post('/users' , mongoConnect , async (req , res) => {
     }
 })
 
+// gets you all the posts for the homepage
 app.get('/posts' , mongoConnect , (req , res) => {
     let { search , offset , userFilter , sort , tags , uid } = req.query;
     tags = tags ? tags.split('$') : [];
@@ -276,6 +290,7 @@ app.get('/posts' , mongoConnect , (req , res) => {
     
 })
 
+// gets the comments based on the post id
 app.get('/comments/:id' , mongoConnect , (req , res) => {
     let { offset , uid } = req.query;
     offset = parseInt(offset);
@@ -300,9 +315,9 @@ app.get('/comments/:id' , mongoConnect , (req , res) => {
     })
 })
 
+// gets a specific post by its id
 app.get('/posts/:id' , mongoConnect , (req , res) => {
     let { uid } = req.query;
-    console.log(uid);
     Post.findById(req.params.id).then(async post => {
         post = post.toJSON();
         await Like.countDocuments({type: 'post' , postID: post.id} , (error , count) => post = {...post , likes: count});
@@ -319,6 +334,7 @@ app.get('/posts/:id' , mongoConnect , (req , res) => {
     });
 })
 
+// gets the users info for the profile page
 app.get('/users/:id' , mongoConnect , (req , res) => {
     User.find({githubID: req.params.id}).then(async result => {
         result = result[0];
@@ -336,6 +352,17 @@ app.get('/users/:id' , mongoConnect , (req , res) => {
     });
 })
 
+// gets all the users by rank for the score board
+app.get('/users' , mongoConnect , (req , res) => {
+    let { offset } = req.query;
+    User.find({}).sort('-rank').then((result) => {
+        let dataLength = result.length;
+        result = result.slice(0 , offset);
+        mongoose.connection.close().then(() => res.send({data: result , length: dataLength}));
+    })
+})
+
+// gets all saved posts based on the user id
 app.get('/saved/:id' , mongoConnect , (req , res) => {
     let { offset } = req.query;
     let id = req.params.id;
@@ -350,7 +377,7 @@ app.get('/saved/:id' , mongoConnect , (req , res) => {
         {
             queryArray.push({_id: post});
         }
-        Post.find({$or: queryArray}) // saved => [{id: 'fr65d012eecam34k42dc771'} , {id: '534rvg56y6ffgf66g5yr91'} , {id: 'csd024j3t67s3js75t437h'}]
+        Post.find({$or: queryArray})
         .sort('-date')
         .then(async result => {
             let dataLength = result.length;
@@ -369,6 +396,7 @@ app.get('/saved/:id' , mongoConnect , (req , res) => {
     });
 })
 
+// updates users saved posts array
 app.put('/users/:id' , mongoConnect , (req , res) => {
     User.find({githubID: req.params.id}).then(user => {
         user = user[0];
@@ -417,3 +445,5 @@ app.use(unknownEndpoint);
 
 console.log("Listening to port: " + (process.env.PORT || 3001));
 app.listen(process.env.PORT || 3001); // localhost port
+
+module.exports = app;
